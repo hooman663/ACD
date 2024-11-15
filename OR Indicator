@@ -1,0 +1,116 @@
+//+------------------------------------------------------------------+
+//|                                              OpeningRangeLines.mq4 |
+//|                                                                    |
+//|                                             Copyright 2024         |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2024"
+#property link      ""
+#property version   "1.00"
+#property strict
+#property indicator_chart_window
+
+// Input parameters
+input int ATR_Period = 10;        // ATR Period
+input double ATR_Multiplier = 0.1; // ATR Offset Multiplier (10% = 0.1)
+
+// Global variables
+double g_highPrice;
+double g_lowPrice;
+double g_atrValue;
+datetime g_rangeStart;
+datetime g_rangeEnd;
+bool g_rangeSet = false;
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                           |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Custom indicator deinitialization function                         |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    ObjectsDeleteAll(0, "OR_");
+}
+
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                                |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+{
+    if(rates_total < ATR_Period) return(0);
+    
+    // Get current time components
+    MqlDateTime dt;
+    TimeToStruct(TimeCurrent(), dt);
+    
+    // Reset range at the start of a new day
+    if(dt.hour == 15 && dt.min == 0)
+    {
+        g_rangeSet = false;
+        g_highPrice = 0;
+        g_lowPrice = 999999;
+        g_rangeStart = TimeCurrent();
+        g_rangeEnd = g_rangeStart + 30 * 60; // Add 30 minutes
+    }
+    
+    // Calculate OR high and low during 15:00-15:30
+    if(!g_rangeSet && TimeCurrent() >= g_rangeStart && TimeCurrent() <= g_rangeEnd)
+    {
+        g_highPrice = MathMax(g_highPrice, High[0]);
+        g_lowPrice = MathMin(g_lowPrice, Low[0]);
+    }
+    
+    // Set the range and draw lines after 15:30
+    if(!g_rangeSet && TimeCurrent() > g_rangeEnd)
+    {
+        g_rangeSet = true;
+        
+        // Calculate ATR
+        g_atrValue = iATR(NULL, 0, ATR_Period, 0);
+        double atrOffset = g_atrValue * ATR_Multiplier;
+        
+        // Draw OR high line
+        ObjectDelete(0, "OR_High");
+        ObjectCreate(0, "OR_High", OBJ_HLINE, 0, 0, g_highPrice);
+        ObjectSetInteger(0, "OR_High", OBJPROP_COLOR, clrBlue);
+        ObjectSetInteger(0, "OR_High", OBJPROP_STYLE, STYLE_SOLID);
+        ObjectSetInteger(0, "OR_High", OBJPROP_WIDTH, 1);
+        
+        // Draw OR low line
+        ObjectDelete(0, "OR_Low");
+        ObjectCreate(0, "OR_Low", OBJ_HLINE, 0, 0, g_lowPrice);
+        ObjectSetInteger(0, "OR_Low", OBJPROP_COLOR, clrBlue);
+        ObjectSetInteger(0, "OR_Low", OBJPROP_STYLE, STYLE_SOLID);
+        ObjectSetInteger(0, "OR_Low", OBJPROP_WIDTH, 1);
+        
+        // Draw upper offset line
+        ObjectDelete(0, "OR_UpperOffset");
+        ObjectCreate(0, "OR_UpperOffset", OBJ_HLINE, 0, 0, g_highPrice + atrOffset);
+        ObjectSetInteger(0, "OR_UpperOffset", OBJPROP_COLOR, clrRed);
+        ObjectSetInteger(0, "OR_UpperOffset", OBJPROP_STYLE, STYLE_DASH);
+        ObjectSetInteger(0, "OR_UpperOffset", OBJPROP_WIDTH, 1);
+        
+        // Draw lower offset line
+        ObjectDelete(0, "OR_LowerOffset");
+        ObjectCreate(0, "OR_LowerOffset", OBJ_HLINE, 0, 0, g_lowPrice - atrOffset);
+        ObjectSetInteger(0, "OR_LowerOffset", OBJPROP_COLOR, clrRed);
+        ObjectSetInteger(0, "OR_LowerOffset", OBJPROP_STYLE, STYLE_DASH);
+        ObjectSetInteger(0, "OR_LowerOffset", OBJPROP_WIDTH, 1);
+    }
+    
+    return(rates_total);
+}
